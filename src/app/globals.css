@@ -1,0 +1,86 @@
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: #d94e2c;
+}
+:root {
+  --background: #faf9f6;
+  --foreground: #262820;
+  --card: #fff;
+  --muted: #f0efea;
+  --muted-foreground: #72746c;
+  --border: #e6e5df;
+}
+.dark {
+  --background: #171915;
+  --foreground: #eeeee6;
+  --card: #20231e;
+  --muted: #2a2e26;
+  --muted-foreground: #a6aa9d;
+  --border: #353a30;
+}
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+}
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
+}
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+button,
+a {
+  touch-action: manipulation;
+}
+button {
+  cursor: pointer;
+}
+input,
+select {
+  font: inherit;
+}
+a,
+button,
+input,
+select {
+  outline-offset: 4px;
+}
+::selection {
+  background: #f3bda8;
+  color: #262820;
+}
+@layer components {
+  .field {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--background);
+    border-radius: 9px;
+    padding: 13px 15px;
+    outline-color: #d94e2c;
+  }
+  .label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 9px;
+  }
+}
+.dot-grid {
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
