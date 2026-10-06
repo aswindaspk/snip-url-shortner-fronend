@@ -2,7 +2,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ArrowUpRight,
   Link2,
   LayoutDashboard,
   ChartNoAxesCombined,
@@ -59,18 +58,7 @@ export function Sidebar() {
         <div className="px-3 max-md:hidden">
           <Logo />
         </div>
-        <div className="mt-10 mb-7 rounded-lg border bg-background px-3 py-3 flex items-center gap-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#edeadf] text-[#615a44] text-xs font-bold">
-            S
-          </span>
-          <div>
-            <p className="font-semibold text-xs">Your workspace</p>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Make every link count
-            </p>
-          </div>
-        </div>
-        <p className="px-3 mb-3 text-[10px] font-semibold tracking-[.14em] text-muted-foreground">
+        <p className="mt-10 px-3 mb-3 text-[10px] font-semibold tracking-[.14em] text-muted-foreground">
           WORKSPACE
         </p>
         <nav className="space-y-1" aria-label="Workspace">
@@ -88,23 +76,6 @@ export function Sidebar() {
           ))}
         </nav>
         <div className="mt-auto pt-12">
-          <div className="rounded-xl bg-background border p-4 mb-6">
-            <span className="text-primary">
-              <Link2 size={21} />
-            </span>
-            <p className="font-semibold text-xs mt-3">
-              A little link. A lot of potential.
-            </p>
-            <p className="text-xs text-muted-foreground leading-5 mt-2">
-              Make your next big idea easier to share.
-            </p>
-            <Link
-              href="/features"
-              className="mt-3 text-xs inline-flex items-center gap-2 font-medium"
-            >
-              Explore Snip <ArrowUpRight size={14} />
-            </Link>
-          </div>
           <nav aria-label="Account">
             {[
               { href: "/app/settings", label: "Settings", icon: Settings },

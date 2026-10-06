@@ -21,31 +21,30 @@ Next.js rewrites `/api/*` to the existing backend (default port 3000). This is t
 - Dashboard and honest availability states for missing services
 - Light, dark, and system themes
 
-## Backend API configuration (AGENTS.md section 66)
+## Backend API integration
 
-`src/lib/api-config.ts` centralizes URL endpoint paths, Better Auth's base path, and the public short-link origin. `BACKEND_URL` in `.env.local` sets the external backend origin in the existing Next.js rewrite (default `http://localhost:3000`). Restart Next.js after changing it. Browser requests use `/api/*` on the frontend origin and are forwarded to the backend, with cookies included. No API handlers are created.
+`src/lib/api-config.ts` centralizes endpoint paths. `BACKEND_URL` configures the existing Next.js rewrite (default `http://localhost:3000`). Requests include Better Auth session cookies; no user IDs are sent as proof of ownership.
 
-| Client helper    | Method | Backend path                             |
-| ---------------- | ------ | ---------------------------------------- |
-| `createUrl`      | POST   | `/api/v1/urls`                           |
-| `getUserUrls`    | GET    | `/api/v1/urls/:userId`                   |
-| `getUrlDetails`  | GET    | `/api/v1/urls/:userId/:urlId`            |
-| `generateQrCode` | GET    | `/api/v1/urls/:userId/:urlId/generateQr` |
-| `deleteUrl`      | GET    | `/api/v1/urls/:userId/:urlId/delete`     |
-| `updateUrl`      | POST   | `/api/v1/urls/:userId/:urlId/`           |
+Verified against `../snip-url-shortner/src` on October 6, 2026:
 
-The `:/userId:/urlId` notation in section 66 is interpreted as separate path segments `/:userId/:urlId`. IDs are encoded. Read helpers accept an AbortSignal. All requests have a 15-second timeout, safe error messages, cookie credentials, and no automatic retries. The delete endpoint is an explicit mutation despite its GET method and must never be prefetched or automatically retried.
+| Action | Method and path | Request body |
+| --- | --- | --- |
+| Create | POST `/api/v1/urls` | `{longUrl, alias?}` |
+| Update destination | POST `/api/v1/urls/:shortCode` | `{shortUrl, newLongUrl, aliasChanged: false, urlChanged: true}` |
+| Delete | DELETE `/api/v1/urls/:shortCode` | `{shortUrl}` |
 
-### Confirmed contracts and remaining backend requirements
+Update and delete controllers currently read `shortUrl` from the JSON body, so the frontend sends it in both the route and body. Both return a JSON message. Destructive operations are never automatically retried.
 
-Read-only inspection of `../snip-url-shortner/src` confirms URL creation accepts `{longUrl, alias?}` and returns `{shortUrl: {id,shortCode,longUrl,createdAt,clickCount,isActive,qrCode}}`. Creation is connected to the existing form and validated with Zod.
+`/app/urls` offers a short-code entry form for updating an owned link's destination and a modal confirmation for deletion. It handles validation, pending requests, errors, rate-limit cooldown, and expired sessions. Authenticated creation results link to this page with the short code prefilled. The existing result supports copy/open/share and PNG QR display/download. No local history is represented as an account-owned collection.
 
-The local backend currently mounts only the creation route, redirects, and Better Auth. Section 66's list/detail/QR/delete/update routes are now available as frontend transport helpers, but are not implemented in that backend snapshot. Response bodies, update fields, pagination, and analytics schemas have not been supplied. The helpers return `unknown` (QR returns a checked `Response`) so consumers must validate the eventual contract before displaying data. Management and analytics screens remain unavailable until these contracts exist; no payload schemas or metrics are fabricated.
+### Remaining backend gaps
 
-### Authentication and Google sign-in
+- No account URL-list route is mounted. `getUrlDetailsController` is empty and sends no response. Saved-link lists/details therefore cannot be connected yet.
+- `optionalAuth` sets `req.user`, but `createUrlController` reads `req.body.user`. The creation controller must use the authenticated request identity for newly created URLs to be owned by the signed-in user. The frontend does not send a client-asserted user identity to work around this.
+- Alias updates write `data.alias`, while the Prisma URL model defines `shortCode`. Alias editing is not exposed until that mismatch is fixed.
+- A separate QR generation route, enable/disable, and pagination are not implemented. QR codes returned during creation are supported.
+- Analytics remains pending.
 
-Better Auth uses `/api/auth` through the same rewrite for signup, email login, logout, and session retrieval. Both auth forms now offer Google sign-in through `authClient.signIn.social`, preserving safe intended workspace navigation and displaying failures.
+Google social-provider and localhost:3001 trusted-origin configuration are now present in the inspected auth source. Existing frontend Better Auth sign-in, signup, signout, session, and Google flows use `/api/auth`. Valid server-side Google credentials are still required. See [Better Auth Google documentation](https://better-auth.com/docs/authentication/google).
 
-Google OAuth is not configured in the inspected backend. Its owner must enable the Google provider with server-side credentials, configure its public auth origin and Google callback URI (locally `http://localhost:3000/api/auth/callback/google`), and trust the frontend origin (`http://localhost:3001` locally). Keep secrets on the backend. See [Better Auth Google documentation](https://better-auth.com/docs/authentication/google). Until configured, users can use email/password and Google attempts show an error.
-
-Live authenticated, OAuth, and URL creation validation requires the running backend and its database/Redis dependencies. No backend files were changed.
+No backend files were modified. Live authenticated mutation verification requires the backend running on port 3000 and an account-owned test URL.

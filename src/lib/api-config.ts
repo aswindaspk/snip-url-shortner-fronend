@@ -14,16 +14,8 @@ function segment(value: string | number): string {
   return encodeURIComponent(text);
 }
 
-// Section 66's :/userId:/urlId notation represents /:userId/:urlId.
+// Verified against the backend router: ownership comes from the Better Auth session.
 export const urlEndpoints = {
   create: apiConfig.urls,
-  list: (userId: string) => `${apiConfig.urls}/${segment(userId)}`,
-  details: (userId: string, urlId: string | number) =>
-    `${apiConfig.urls}/${segment(userId)}/${segment(urlId)}`,
-  qr: (userId: string, urlId: string | number) =>
-    `${urlEndpoints.details(userId, urlId)}/generateQr`,
-  delete: (userId: string, urlId: string | number) =>
-    `${urlEndpoints.details(userId, urlId)}/delete`,
-  update: (userId: string, urlId: string | number) =>
-    `${urlEndpoints.details(userId, urlId)}/`,
+  item: (shortCode: string) => `${apiConfig.urls}/${segment(shortCode)}`,
 };

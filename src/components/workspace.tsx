@@ -2,7 +2,6 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
@@ -13,14 +12,12 @@ export function Workspace({ children }: { children: React.ReactNode }) {
   const { data: session, isPending, error, refetch } = authClient.useSession();
   const router = useRouter();
   const path = usePathname();
-  const cache = useQueryClient();
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!isPending && !session && !error) {
-      cache.clear();
       router.replace(`/login?next=${encodeURIComponent(path)}`);
     }
-  }, [session, isPending, error, path, router, cache]);
+  }, [session, isPending, error, path, router]);
   if (isPending)
     return (
       <div
@@ -80,7 +77,6 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                     toast.error("Couldn’t sign out. Please try again.");
                     return;
                   }
-                  cache.clear();
                   router.replace("/login");
                 } catch {
                   toast.error("Couldn’t sign out. Please try again.");

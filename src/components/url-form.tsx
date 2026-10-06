@@ -1,5 +1,4 @@
 "use client";
-import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -16,36 +15,70 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ApiError, createUrl, urlInput } from "@/lib/api";
+import { ApiError, createUrl, urlInput, type ShortLink } from "@/lib/api";
+import { authClient } from "@/lib/auth";
 import { apiConfig } from "@/lib/api-config";
 import { safeUrl } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 export function UrlForm() {
+  const { data: session } = authClient.useSession();
   const [advanced, setAdvanced] = useState(false);
   const [longUrl, setLongUrl] = useState("");
   const [alias, setAlias] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [qr, setQr] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  const mutation = useMutation({
-    mutationFn: createUrl,
-    onSuccess: () => toast.success("Your short link is ready"),
-    onError: (e) => {
-      if (e instanceof ApiError && e.status === 429)
-        setCooldown(e.retryAfter || 30);
-    },
-  });
+  const [createdLink, setCreatedLink] = useState<ShortLink | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [requestError, setRequestError] = useState<Error | null>(null);
   useEffect(() => {
     if (!cooldown) return;
     const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
     return () => clearTimeout(timer);
   }, [cooldown]);
-  const shortUrl = mutation.data
+  const shortUrl = createdLink
     ? safeUrl(
-        `${apiConfig.shortUrlBase}/${encodeURIComponent(mutation.data.shortCode)}`,
+        `${apiConfig.shortUrlBase}/${encodeURIComponent(createdLink.shortCode)}`,
       )
     : null;
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (isSubmitting || cooldown > 0) return;
+
+    const parsed = urlInput.safeParse({
+      longUrl: longUrl.trim(),
+      alias: alias.trim() || undefined,
+    });
+    if (!parsed.success) {
+      setErrors(
+        Object.fromEntries(
+          parsed.error.issues.map((i) => [String(i.path[0]), i.message]),
+        ),
+      );
+      return;
+    }
+
+    setErrors({});
+    setRequestError(null);
+    setCreatedLink(null);
+    setQr(false);
+    setIsSubmitting(true);
+    try {
+      setCreatedLink(await createUrl(parsed.data));
+      toast.success("Your short link is ready");
+    } catch (error) {
+      const failure =
+        error instanceof Error
+          ? error
+          : new Error("Couldn’t create your link. Please try again.");
+      setRequestError(failure);
+      if (failure instanceof ApiError && failure.status === 429)
+        setCooldown(failure.retryAfter || 30);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
   async function copy() {
     if (!shortUrl) return;
     try {
@@ -73,27 +106,7 @@ export function UrlForm() {
           </p>
         </div>
       </div>
-      <form
-        className="p-6"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const parsed = urlInput.safeParse({
-            longUrl: longUrl.trim(),
-            alias: alias.trim() || undefined,
-          });
-          if (!parsed.success) {
-            setErrors(
-              Object.fromEntries(
-                parsed.error.issues.map((i) => [String(i.path[0]), i.message]),
-              ),
-            );
-            return;
-          }
-          setErrors({});
-          setQr(false);
-          mutation.mutate(parsed.data);
-        }}
-      >
+      <form className="p-6" onSubmit={handleSubmit}>
         <label htmlFor="long-url" className="label">
           Destination URL
         </label>
@@ -115,19 +128,16 @@ export function UrlForm() {
               aria-describedby={errors.longUrl ? "url-error" : undefined}
             />
           </div>
-          <Button
-            className="h-12 px-6"
-            disabled={mutation.isPending || cooldown > 0}
-          >
-            {mutation.isPending ? (
+          <Button className="h-12 px-6" disabled={isSubmitting || cooldown > 0}>
+            {isSubmitting ? (
               <Loader2 className="animate-spin" size={17} />
             ) : null}
-            {mutation.isPending
+            {isSubmitting
               ? "Shortening…"
               : cooldown
                 ? `Retry in ${cooldown}s`
                 : "Shorten link"}
-            {!mutation.isPending && <ArrowRight size={17} />}
+            {!isSubmitting && <ArrowRight size={17} />}
           </Button>
         </div>
         {errors.longUrl && (
@@ -172,14 +182,14 @@ export function UrlForm() {
             )}
           </div>
         )}
-        {mutation.error && (
+        {requestError && (
           <div
             role="alert"
             className="mt-4 rounded-lg bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-300"
           >
-            {mutation.error.message}
-            {mutation.error instanceof ApiError &&
-              mutation.error.status === 401 && (
+            {requestError.message}
+            {requestError instanceof ApiError &&
+              requestError.status === 401 && (
                 <Link href="/login" className="underline ml-2">
                   Sign in
                 </Link>
@@ -187,7 +197,7 @@ export function UrlForm() {
           </div>
         )}
       </form>
-      {shortUrl && mutation.data && (
+      {shortUrl && createdLink && (
         <div
           className="border-t p-6 bg-green-500/5 rounded-b-xl"
           aria-live="polite"
@@ -208,6 +218,15 @@ export function UrlForm() {
               </a>
             </div>
             <div className="flex flex-wrap gap-2">
+              {session && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link
+                    href={`/app/urls?code=${encodeURIComponent(createdLink.shortCode)}`}
+                  >
+                    Manage link
+                  </Link>
+                </Button>
+              )}
               <Button variant="outline" size="sm" type="button" onClick={copy}>
                 <Copy size={14} />
                 Copy
@@ -248,11 +267,11 @@ export function UrlForm() {
           </div>
           {qr &&
             /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(
-              mutation.data.qrCode,
+              createdLink.qrCode,
             ) && (
               <div className="mt-5 flex items-center gap-5">
                 <img
-                  src={mutation.data.qrCode}
+                  src={createdLink.qrCode}
                   alt={`QR code for ${shortUrl}`}
                   width={140}
                   height={140}
@@ -260,8 +279,8 @@ export function UrlForm() {
                 />
                 <Button variant="outline" asChild>
                   <a
-                    href={mutation.data.qrCode}
-                    download={`snip-${mutation.data.shortCode}.png`}
+                    href={createdLink.qrCode}
+                    download={`snip-${createdLink.shortCode}.png`}
                   >
                     <Download size={15} />
                     Download QR

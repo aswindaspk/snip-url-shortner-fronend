@@ -105,66 +105,59 @@ test("non-JSON responses never leak server content", async () => {
   );
 });
 
-test("section 66 routes encode IDs, include cookies, and use the specified methods", async () => {
-  const { getUserUrls, getUrlDetails, generateQrCode, deleteUrl, updateUrl } =
-    await import("../src/lib/api.ts");
+test("uses the implemented short-code mutation routes and bodies", async () => {
+  const { updateUrl, deleteUrl } = await import("../src/lib/api.ts");
   const calls = [];
   mock.method(globalThis, "fetch", async (url, options) => {
-    calls.push({ url, method: options.method, body: options.body });
+    calls.push({ url, method: options.method, body: JSON.parse(options.body) });
     assert.equal(options.credentials, "include");
-    assert.equal(options.cache, "no-store");
-    return Response.json({});
+    return Response.json({ message: "Success" });
   });
-  await getUserUrls("user/id");
-  await getUrlDetails("user/id", 42);
-  await generateQrCode("user/id", 42);
-  await deleteUrl("user/id", 42);
-  await updateUrl("user/id", 42, {});
+  await updateUrl({
+    shortUrl: "my-link",
+    newLongUrl: "https://example.com/new",
+  });
+  await deleteUrl("my-link");
   assert.deepEqual(calls, [
-    { url: "/api/v1/urls/user%2Fid", method: "GET", body: undefined },
-    { url: "/api/v1/urls/user%2Fid/42", method: "GET", body: undefined },
     {
-      url: "/api/v1/urls/user%2Fid/42/generateQr",
-      method: "GET",
-      body: undefined,
+      url: "/api/v1/urls/my-link",
+      method: "POST",
+      body: {
+        shortUrl: "my-link",
+        newLongUrl: "https://example.com/new",
+        aliasChanged: false,
+        urlChanged: true,
+      },
     },
-    { url: "/api/v1/urls/user%2Fid/42/delete", method: "GET", body: undefined },
-    { url: "/api/v1/urls/user%2Fid/42/", method: "POST", body: "{}" },
+    {
+      url: "/api/v1/urls/my-link",
+      method: "DELETE",
+      body: { shortUrl: "my-link" },
+    },
   ]);
 });
 
-test("delete accepts an empty success response without parsing JSON", async () => {
-  const { deleteUrl } = await import("../src/lib/api.ts");
-  mock.method(
-    globalThis,
-    "fetch",
-    async () => new Response(null, { status: 204 }),
-  );
-  await deleteUrl("user", 1);
-});
-
-test("failed deletion is never automatically retried", async () => {
-  const { deleteUrl } = await import("../src/lib/api.ts");
-  let calls = 0;
-  mock.method(globalThis, "fetch", async () => {
-    calls++;
-    return new Response(null, { status: 503 });
-  });
-  await assert.rejects(deleteUrl("user", 1), (e) => e.status === 503);
-  assert.equal(calls, 1);
-});
-
-test("cancellation preserves the caller's abort reason", async () => {
-  const { getUserUrls } = await import("../src/lib/api.ts");
-  const controller = new AbortController();
-  controller.abort(new DOMException("Cancelled", "AbortError"));
-  mock.method(globalThis, "fetch", async (_, options) => {
-    options.signal.throwIfAborted();
+test("rejects unsafe edits and invalid short codes before sending", async () => {
+  const { updateUrl, deleteUrl } = await import("../src/lib/api.ts");
+  const fetchMock = mock.method(globalThis, "fetch", async () => {
+    throw new Error("Must not send");
   });
   await assert.rejects(
-    getUserUrls("user", controller.signal),
-    (e) => e.name === "AbortError",
+    updateUrl({ shortUrl: "abc", newLongUrl: "javascript:alert(1)" }),
   );
+  await assert.rejects(deleteUrl("../abc"));
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
+test("does not retry failed destructive requests", async () => {
+  const { deleteUrl } = await import("../src/lib/api.ts");
+  const fetchMock = mock.method(
+    globalThis,
+    "fetch",
+    async () => new Response(null, { status: 503 }),
+  );
+  await assert.rejects(deleteUrl("abc"), (e) => e.status === 503);
+  assert.equal(fetchMock.mock.callCount(), 1);
 });
 
 test("accepts the backend's serialized PNG Buffer and converts it for the browser", async () => {

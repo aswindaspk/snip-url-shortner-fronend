@@ -50,7 +50,7 @@ export class ApiError extends Error {
   }
 }
 type RequestOptions = {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "DELETE";
   body?: unknown;
   signal?: AbortSignal;
 };
@@ -136,50 +136,46 @@ export async function createUrl(
   return parsed.data.shortUrl;
 }
 
-/** Section 66 defines routes only. Keep payloads unknown until schemas are supplied. */
-export async function getUserUrls(
-  userId: string,
-  signal?: AbortSignal,
-): Promise<unknown> {
-  return readJson(await request(urlEndpoints.list(userId), { signal }));
+export const shortCodeInput = z
+  .string()
+  .trim()
+  .min(1, "Enter the short code.")
+  .max(128)
+  .regex(/^[a-zA-Z0-9_-]+$/, "Enter only the short code, not the full URL.");
+export const updateUrlInput = z.object({
+  shortUrl: shortCodeInput,
+  newLongUrl: urlInput.shape.longUrl,
+});
+
+async function confirmMutation(response: Response): Promise<void> {
+  const parsed = z
+    .object({ message: z.string() })
+    .safeParse(await readJson(response));
+  if (!parsed.success)
+    throw new ApiError(
+      "The service returned an unexpected response. Check your link before trying again.",
+      502,
+    );
 }
 
-export async function getUrlDetails(
-  userId: string,
-  urlId: string | number,
-  signal?: AbortSignal,
-): Promise<unknown> {
-  return readJson(
-    await request(urlEndpoints.details(userId, urlId), { signal }),
+export async function deleteUrl(shortCode: string): Promise<void> {
+  const shortUrl = shortCodeInput.parse(shortCode);
+  await confirmMutation(
+    await request(urlEndpoints.item(shortUrl), {
+      method: "DELETE",
+      body: { shortUrl },
+    }),
   );
 }
 
-/** Return the response so its documented image/JSON format can be decoded by the caller. */
-export function generateQrCode(
-  userId: string,
-  urlId: string | number,
-  signal?: AbortSignal,
-): Promise<Response> {
-  return request(urlEndpoints.qr(userId, urlId), { signal });
-}
-
-/** Explicit mutation only: this backend uses GET for deletion. Never prefetch or retry it. */
-export async function deleteUrl(
-  userId: string,
-  urlId: string | number,
-): Promise<void> {
-  await request(urlEndpoints.delete(userId, urlId));
-}
-
-/** The backend owner must provide the allowed update fields before wiring an edit form. */
 export async function updateUrl(
-  userId: string,
-  urlId: string | number,
-  input: Readonly<Record<string, unknown>>,
-): Promise<unknown> {
-  const response = await request(urlEndpoints.update(userId, urlId), {
-    method: "POST",
-    body: input,
-  });
-  return response.status === 204 ? undefined : readJson(response);
+  input: z.infer<typeof updateUrlInput>,
+): Promise<void> {
+  const parsed = updateUrlInput.parse(input);
+  await confirmMutation(
+    await request(urlEndpoints.item(parsed.shortUrl), {
+      method: "POST",
+      body: { ...parsed, aliasChanged: false, urlChanged: true },
+    }),
+  );
 }
